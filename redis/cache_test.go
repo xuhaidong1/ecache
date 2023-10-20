@@ -450,6 +450,58 @@ func TestCache_LPop(t *testing.T) {
 	}
 }
 
+func TestCache_RPop(t *testing.T) {
+	testCase := []struct {
+		name    string
+		mock    func(*gomock.Controller) redis.Cmdable
+		key     string
+		wantVal string
+		wantErr error
+	}{
+		{
+			name: "rpop value",
+			mock: func(ctrl *gomock.Controller) redis.Cmdable {
+				cmd := mocks.NewMockCmdable(ctrl)
+				str := redis.NewStringCmd(context.Background())
+				str.SetVal("test")
+				cmd.EXPECT().
+					RPop(context.Background(), "test_cache_rpop").
+					Return(str)
+				return cmd
+			},
+			key:     "test_cache_rpop",
+			wantVal: "test",
+		},
+		{
+			name: "rpop error",
+			mock: func(ctrl *gomock.Controller) redis.Cmdable {
+				cmd := mocks.NewMockCmdable(ctrl)
+				str := redis.NewStringCmd(context.Background())
+				str.SetErr(redis.Nil)
+				cmd.EXPECT().
+					RPop(context.Background(), "test_cache_rpop").
+					Return(str)
+				return cmd
+			},
+			key:     "test_cache_rpop",
+			wantVal: "",
+			wantErr: errs.ErrKeyNotExist,
+		},
+	}
+
+	for _, tc := range testCase {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			c := NewCache(tc.mock(ctrl))
+			val := c.RPop(context.Background(), tc.key)
+			assert.Equal(t, tc.wantVal, val.Val)
+			assert.Equal(t, tc.wantErr, val.Err)
+		})
+	}
+}
+
 func TestCache_SAdd(t *testing.T) {
 	testCase := []struct {
 		name    string

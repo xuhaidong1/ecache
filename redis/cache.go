@@ -74,6 +74,14 @@ func (c *Cache) LPop(ctx context.Context, key string) (result ecache.Value) {
 	return
 }
 
+func (c *Cache) RPop(ctx context.Context, key string) (result ecache.Value) {
+	result.Val, result.Err = c.client.RPop(ctx, key).Result()
+	if result.Err != nil && errors.Is(result.Err, redis.Nil) {
+		result.Err = errs.ErrKeyNotExist
+	}
+	return
+}
+
 func (c *Cache) SAdd(ctx context.Context, key string, members ...any) (int64, error) {
 	return c.client.SAdd(ctx, key, members...).Result()
 }

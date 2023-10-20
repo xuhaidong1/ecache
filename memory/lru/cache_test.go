@@ -529,6 +529,103 @@ func TestCache_LPop(t *testing.T) {
 	}
 }
 
+func TestCache_RPop(t *testing.T) {
+	evictCounter := 0
+	onEvicted := func(key string, value any) {
+		evictCounter++
+	}
+	lru, err := simplelru.NewLRU[string, any](5, onEvicted)
+	assert.NoError(t, err)
+
+	testCase := []struct {
+		name   string
+		before func(t *testing.T)
+		after  func(t *testing.T)
+
+		key     string
+		wantVal string
+		wantErr error
+	}{
+		{
+			name: "rpop value",
+			before: func(t *testing.T) {
+				val := ecache.Value{}
+				val.Val = "hello ecache"
+				l := &list.ConcurrentList[ecache.Value]{
+					List: list.NewLinkedListOf[ecache.Value]([]ecache.Value{val}),
+				}
+				assert.Equal(t, false, lru.Add("test", l))
+			},
+			after: func(t *testing.T) {
+				assert.Equal(t, true, lru.Remove("test"))
+			},
+			key:     "test",
+			wantVal: "hello ecache",
+		},
+		{
+			name: "rpop value not nil",
+			before: func(t *testing.T) {
+				val := ecache.Value{}
+				val.Val = "hello ecache"
+				val2 := ecache.Value{}
+				val2.Val = "hello world"
+				l := &list.ConcurrentList[ecache.Value]{
+					List: list.NewLinkedListOf[ecache.Value]([]ecache.Value{val, val2}),
+				}
+				assert.Equal(t, false, lru.Add("test", l))
+			},
+			after: func(t *testing.T) {
+				val, ok := lru.Get("test")
+				assert.Equal(t, true, ok)
+				result, ok := val.(list.List[ecache.Value])
+				assert.Equal(t, true, ok)
+				assert.Equal(t, 1, result.Len())
+				value, err := result.Delete(0)
+				assert.NoError(t, err)
+				assert.Equal(t, "hello ecache", value.Val)
+				assert.NoError(t, value.Err)
+
+				assert.Equal(t, true, lru.Remove("test"))
+			},
+			key:     "test",
+			wantVal: "hello world",
+		},
+		{
+			name: "rpop value type error",
+			before: func(t *testing.T) {
+				assert.Equal(t, false, lru.Add("test", "hello world"))
+			},
+			after: func(t *testing.T) {
+				assert.Equal(t, true, lru.Remove("test"))
+			},
+			key:     "test",
+			wantErr: errors.New("当前key不是list类型"),
+		},
+		{
+			name:    "rpop not key",
+			before:  func(t *testing.T) {},
+			after:   func(t *testing.T) {},
+			key:     "test",
+			wantErr: errs.ErrKeyNotExist,
+		},
+	}
+
+	for _, tc := range testCase {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second*5)
+			defer cancelFunc()
+			c := NewCache(lru)
+
+			tc.before(t)
+			val := c.RPop(ctx, tc.key)
+			result, err := val.String()
+			assert.Equal(t, tc.wantVal, result)
+			assert.Equal(t, tc.wantErr, err)
+			tc.after(t)
+		})
+	}
+}
+
 func TestCache_SAdd(t *testing.T) {
 	evictCounter := 0
 	onEvicted := func(key string, value any) {

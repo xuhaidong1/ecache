@@ -189,6 +189,34 @@ func (c *Cache) LPop(ctx context.Context, key string) (val ecache.Value) {
 	return
 }
 
+func (c *Cache) RPop(ctx context.Context, key string) (val ecache.Value) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	var (
+		ok bool
+	)
+	val.Val, ok = c.client.Get(key)
+	if !ok {
+		val.Err = errs.ErrKeyNotExist
+		return
+	}
+
+	data, ok := val.Val.(list.List[ecache.Value])
+	if !ok {
+		val.Err = errors.New("当前key不是list类型")
+		return
+	}
+
+	value, err := data.Delete(data.Len() - 1)
+	if err != nil {
+		val.Err = err
+		return
+	}
+	val = value
+	return
+}
+
 func (c *Cache) SAdd(ctx context.Context, key string, members ...any) (int64, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
